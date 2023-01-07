@@ -34,6 +34,10 @@ type DB struct {
 
 	// function to be used to override the creating of a new timestamp
 	nowFuncOverride func() time.Time
+
+	//====
+	// context
+	ctx context.Context
 }
 
 type logModeValue int
@@ -83,13 +87,15 @@ func Open(dialect string, args ...interface{}) (db *DB, err error) {
 	}
 
 	db = &DB{
-		db:        dbSQL,
-		logger:    defaultLogger,
-		
+		db:     dbSQL,
+		logger: defaultLogger,
+
 		// Create a clone of the default logger to avoid mutating a shared object when
 		// multiple gorm connections are created simultaneously.
 		callbacks: DefaultCallback.clone(defaultLogger),
 		dialect:   newDialect(dialect, dbSQL),
+		//====
+		ctx: context.Background(),
 	}
 	db.parent = db
 	if err != nil {
@@ -110,6 +116,17 @@ func (s *DB) New() *DB {
 	clone.search = nil
 	clone.Value = nil
 	return clone
+}
+
+//====
+func (s *DB) WithContext(ctx context.Context) *DB {
+	closeTx := s.clone()
+	if ctx != nil {
+		closeTx.ctx = ctx
+	} else if s.ctx == nil {
+		closeTx.ctx = context.Background()
+	}
+	return closeTx
 }
 
 type closer interface {
@@ -815,7 +832,7 @@ func (s *DB) AddError(err error) error {
 			if s.logMode == defaultLogMode {
 				go s.print("error", fileWithLineNum(), err)
 			} else {
-				s.log(err)
+				s.logWithContext(s.ctx, err)
 			}
 
 			errors := Errors(s.GetErrors())
@@ -855,6 +872,8 @@ func (s *DB) clone() *DB {
 		blockGlobalUpdate: s.blockGlobalUpdate,
 		dialect:           newDialect(s.dialect.GetName(), s.db),
 		nowFuncOverride:   s.nowFuncOverride,
+		//====
+		ctx: s.ctx,
 	}
 
 	s.values.Range(func(k, v interface{}) bool {
@@ -885,5 +904,19 @@ func (s *DB) log(v ...interface{}) {
 func (s *DB) slog(sql string, t time.Time, vars ...interface{}) {
 	if s.logMode == detailedLogMode {
 		s.print("sql", fileWithLineNum(), NowFunc().Sub(t), sql, vars, s.RowsAffected)
+	}
+}
+
+//====
+func (s *DB) slogWithContext(ctx context.Context, sql string, t time.Time, vars ...interface{}) {
+	if s.logMode == detailedLogMode {
+		s.print("sql", fileWithLineNum(), NowFunc().Sub(t), sql, vars, s.RowsAffected)
+	}
+}
+
+//====
+func (s *DB) logWithContext(ctx context.Context, v ...interface{}) {
+	if s != nil && s.logMode == detailedLogMode {
+		s.print(append([]interface{}{"log", fileWithLineNum()}, v...)...)
 	}
 }

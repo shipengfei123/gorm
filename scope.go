@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
@@ -95,6 +96,11 @@ func (scope *Scope) HasError() bool {
 // Log print log message
 func (scope *Scope) Log(v ...interface{}) {
 	scope.db.log(v...)
+}
+
+//====
+func (scope *Scope) LogWithContext(ctx context.Context, v ...interface{}) {
+	scope.db.logWithContext(ctx, v...)
 }
 
 // SkipLeft skip remaining callbacks
@@ -358,10 +364,10 @@ func (scope *Scope) Raw(sql string) *Scope {
 
 // Exec perform generated SQL
 func (scope *Scope) Exec() *Scope {
-	defer scope.trace(NowFunc())
+	defer scope.traceWithContext(scope.db.ctx, NowFunc())
 
 	if !scope.HasError() {
-		if result, err := scope.SQLDB().Exec(scope.SQL, scope.SQLVars...); scope.Err(err) == nil {
+		if result, err := scope.SQLDB().ExecContext(scope.db.ctx, scope.SQL, scope.SQLVars...); scope.Err(err) == nil {
 			if count, err := result.RowsAffected(); scope.Err(err) == nil {
 				scope.db.RowsAffected = count
 			}
@@ -942,7 +948,7 @@ func (scope *Scope) updatedAttrsWithValues(value interface{}) (results map[strin
 }
 
 func (scope *Scope) row() *sql.Row {
-	defer scope.trace(NowFunc())
+	defer scope.traceWithContext(scope.db.ctx, NowFunc())
 
 	result := &RowQueryResult{}
 	scope.InstanceSet("row_query_result", result)
@@ -952,7 +958,7 @@ func (scope *Scope) row() *sql.Row {
 }
 
 func (scope *Scope) rows() (*sql.Rows, error) {
-	defer scope.trace(NowFunc())
+	defer scope.traceWithContext(scope.db.ctx, NowFunc())
 
 	result := &RowsQueryResult{}
 	scope.InstanceSet("row_query_result", result)
@@ -1053,6 +1059,13 @@ func (scope *Scope) typeName() string {
 func (scope *Scope) trace(t time.Time) {
 	if len(scope.SQL) > 0 {
 		scope.db.slog(scope.SQL, t, scope.SQLVars...)
+	}
+}
+
+//====
+func (scope *Scope) traceWithContext(ctx context.Context, t time.Time) {
+	if len(scope.SQL) > 0 {
+		scope.db.slogWithContext(ctx, scope.SQL, t, scope.SQLVars...)
 	}
 }
 
