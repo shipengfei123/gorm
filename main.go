@@ -120,13 +120,13 @@ func (s *DB) New() *DB {
 
 //====
 func (s *DB) WithContext(ctx context.Context) *DB {
-	closeTx := s.clone()
+	cloneTx := s.clone()
 	if ctx != nil {
-		closeTx.ctx = ctx
+		cloneTx.ctx = ctx
 	} else if s.ctx == nil {
-		closeTx.ctx = context.Background()
+		cloneTx.ctx = context.Background()
 	}
-	return closeTx
+	return cloneTx
 }
 
 type closer interface {
@@ -577,7 +577,7 @@ func (s *DB) Transaction(fc func(tx *DB) error) (err error) {
 
 // Begin begins a transaction
 func (s *DB) Begin() *DB {
-	return s.BeginTx(context.Background(), &sql.TxOptions{})
+	return s.BeginTx(s.ctx, &sql.TxOptions{})
 }
 
 // BeginTx begins a transaction with options
