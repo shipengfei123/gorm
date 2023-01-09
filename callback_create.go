@@ -130,7 +130,7 @@ func createCallback(scope *Scope) {
 
 		// execute create sql: no primaryField
 		if primaryField == nil {
-			if result, err := scope.SQLDB().Exec(scope.SQL, scope.SQLVars...); scope.Err(err) == nil {
+			if result, err := scope.SQLDB().ExecContext(scope.db.ctx, scope.SQL, scope.SQLVars...); scope.Err(err) == nil {
 				// set rows affected count
 				scope.db.RowsAffected, _ = result.RowsAffected()
 

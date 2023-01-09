@@ -34,6 +34,10 @@ type DB struct {
 
 	// function to be used to override the creating of a new timestamp
 	nowFuncOverride func() time.Time
+
+	//====
+	// context
+	ctx context.Context
 }
 
 type logModeValue int
@@ -83,13 +87,15 @@ func Open(dialect string, args ...interface{}) (db *DB, err error) {
 	}
 
 	db = &DB{
-		db:        dbSQL,
-		logger:    defaultLogger,
-		
+		db:     dbSQL,
+		logger: defaultLogger,
+
 		// Create a clone of the default logger to avoid mutating a shared object when
 		// multiple gorm connections are created simultaneously.
 		callbacks: DefaultCallback.clone(defaultLogger),
 		dialect:   newDialect(dialect, dbSQL),
+		//====
+		ctx: context.Background(),
 	}
 	db.parent = db
 	if err != nil {
@@ -110,6 +116,17 @@ func (s *DB) New() *DB {
 	clone.search = nil
 	clone.Value = nil
 	return clone
+}
+
+//====
+func (s *DB) WithContext(ctx context.Context) *DB {
+	cloneTx := s.clone()
+	if ctx != nil {
+		cloneTx.ctx = ctx
+	} else if s.ctx == nil {
+		cloneTx.ctx = context.Background()
+	}
+	return cloneTx
 }
 
 type closer interface {
@@ -560,7 +577,7 @@ func (s *DB) Transaction(fc func(tx *DB) error) (err error) {
 
 // Begin begins a transaction
 func (s *DB) Begin() *DB {
-	return s.BeginTx(context.Background(), &sql.TxOptions{})
+	return s.BeginTx(s.ctx, &sql.TxOptions{})
 }
 
 // BeginTx begins a transaction with options
@@ -855,6 +872,8 @@ func (s *DB) clone() *DB {
 		blockGlobalUpdate: s.blockGlobalUpdate,
 		dialect:           newDialect(s.dialect.GetName(), s.db),
 		nowFuncOverride:   s.nowFuncOverride,
+		//====
+		ctx: s.ctx,
 	}
 
 	s.values.Range(func(k, v interface{}) bool {
